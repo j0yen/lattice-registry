@@ -1,8 +1,6 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
-use ureq::Agent;
 
 use crate::catalog::{Catalog, CatalogEntry};
 use crate::error::{Error, Result};

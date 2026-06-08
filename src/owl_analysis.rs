@@ -49,8 +49,8 @@ pub fn analyse_owl_file(path: &Path) -> Result<OwlAnalysis> {
             Component::DeclareClass(_) => {
                 class_count += 1;
             }
-            Component::Import(iri) => {
-                imports.push(iri.to_string());
+            Component::Import(import) => {
+                imports.push(import.0.to_string());
             }
             Component::AnnotationAssertion(aa) => {
                 let prop_iri = aa.ann.ap.0.to_string();

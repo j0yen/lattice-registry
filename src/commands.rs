@@ -2,21 +2,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
-use reqwest::blocking::Client;
+use ureq::Agent;
 
 use crate::catalog::{Catalog, CatalogEntry};
 use crate::error::{Error, Result};
 use crate::fetcher;
 use crate::owl_analysis;
 use crate::registry::OboFoundryRegistry;
-
-/// Build an HTTP client (used for live operations).
-pub fn build_client() -> Result<Client> {
-    Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .map_err(|e| Error::Network(e.to_string()))
-}
 
 /// `lattice-registry sync` — ingest OBO Foundry registry.
 pub fn cmd_sync(
@@ -31,11 +23,11 @@ pub fn cmd_sync(
         )));
     }
 
-    let client = build_client()?;
+    let agent = fetcher::build_agent();
     let registry_cache = cache_dir.join("obo-foundry-registry.jsonld");
 
     eprintln!("Fetching OBO Foundry registry…");
-    let json_data = fetcher::fetch_obo_foundry_registry(&client, &registry_cache)
+    let json_data = fetcher::fetch_obo_foundry_registry(&agent, &registry_cache)
         .map_err(|e| {
             eprintln!("Warning: network error fetching registry: {}", e);
             e
@@ -97,7 +89,7 @@ pub fn cmd_add(
     cache_dir: &Path,
     iri: &str,
 ) -> Result<()> {
-    let client = build_client()?;
+    let agent = fetcher::build_agent();
     let mut catalog = Catalog::load(catalog_path)?;
 
     // Generate an ID from the IRI (last path segment, without extension).
@@ -113,7 +105,7 @@ pub fn cmd_add(
 
     eprintln!("Fetching {}…", iri);
     let fetch_result =
-        fetcher::fetch_to_file(&client, iri, &dest, existing_etag.as_deref())?;
+        fetcher::fetch_to_file(&agent, iri, &dest, existing_etag.as_deref())?;
 
     if fetch_result.was_cached {
         println!("{}: up to date (etag unchanged, no re-download)", id);

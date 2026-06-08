@@ -1,8 +1,8 @@
 use std::fs;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
-use reqwest::blocking::Client;
-use reqwest::header::{ETAG, IF_NONE_MATCH};
+use ureq::Agent;
 
 use crate::error::{Error, Result};
 
@@ -12,50 +12,54 @@ pub struct FetchResult {
     pub was_cached: bool,
 }
 
+/// Build a ureq agent (reuse across requests).
+pub fn build_agent() -> Agent {
+    ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+}
+
 /// Fetch a URL to a local file, honouring ETag for conditional GET.
 /// Returns `was_cached = true` if the server returned 304 Not Modified.
 pub fn fetch_to_file(
-    client: &Client,
+    agent: &Agent,
     url: &str,
     dest: &Path,
     existing_etag: Option<&str>,
 ) -> Result<FetchResult> {
-    fs::create_dir_all(dest.parent().unwrap_or(dest))?;
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
 
-    let mut req = client.get(url);
+    let mut req = agent.get(url);
     if let Some(etag) = existing_etag {
         if dest.exists() {
-            req = req.header(IF_NONE_MATCH, etag);
+            req = req.set("If-None-Match", etag);
         }
     }
 
-    let response = req.send().map_err(|e| {
-        Error::Network(format!("GET {url}: {e}"))
-    })?;
+    let response = match req.call() {
+        Ok(r) => r,
+        Err(ureq::Error::Status(304, _)) => {
+            // Not modified — use cached file.
+            return Ok(FetchResult {
+                path: dest.to_path_buf(),
+                etag: existing_etag.map(String::from),
+                was_cached: true,
+            });
+        }
+        Err(e) => {
+            return Err(Error::Network(format!("GET {url}: {e}")));
+        }
+    };
 
-    if response.status().as_u16() == 304 {
-        // Not modified — use cached file.
-        return Ok(FetchResult {
-            path: dest.to_path_buf(),
-            etag: existing_etag.map(String::from),
-            was_cached: true,
-        });
-    }
+    let new_etag = response.header("etag").map(String::from);
+    let mut body: Vec<u8> = Vec::new();
+    response
+        .into_reader()
+        .read_to_end(&mut body)
+        .map_err(|e| Error::Network(format!("reading response body: {e}")))?;
 
-    if !response.status().is_success() {
-        return Err(Error::Network(format!(
-            "GET {url} returned {}",
-            response.status()
-        )));
-    }
-
-    let new_etag = response
-        .headers()
-        .get(ETAG)
-        .and_then(|v| v.to_str().ok())
-        .map(String::from);
-
-    let body = response.bytes().map_err(|e| Error::Network(e.to_string()))?;
     fs::write(dest, &body)?;
 
     Ok(FetchResult {
@@ -66,8 +70,8 @@ pub fn fetch_to_file(
 }
 
 /// Fetch the OBO Foundry JSON-LD registry.
-pub fn fetch_obo_foundry_registry(client: &Client, dest: &Path) -> Result<String> {
+pub fn fetch_obo_foundry_registry(agent: &Agent, dest: &Path) -> Result<String> {
     let url = "https://obofoundry.org/registry/ontologies.jsonld";
-    fetch_to_file(client, url, dest, None)?;
+    fetch_to_file(agent, url, dest, None)?;
     Ok(fs::read_to_string(dest)?)
 }

@@ -1,0 +1,1 @@
+/root/build/lattice-registry/target/debug/lattice-registry: /root/build/lattice-registry/src/catalog.rs /root/build/lattice-registry/src/commands.rs /root/build/lattice-registry/src/error.rs /root/build/lattice-registry/src/fetcher.rs /root/build/lattice-registry/src/main.rs /root/build/lattice-registry/src/owl_analysis.rs /root/build/lattice-registry/src/registry.rs

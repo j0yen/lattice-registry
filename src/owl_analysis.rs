@@ -15,6 +15,7 @@ pub struct OwlAnalysis {
     pub class_count: u64,
     pub bfo_grounded: bool,
     pub license: String,
+    #[allow(dead_code)]
     pub imports: Vec<String>,
 }
 
